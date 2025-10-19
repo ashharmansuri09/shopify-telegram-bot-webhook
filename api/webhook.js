@@ -8,16 +8,16 @@ dotenv.config();
 
 const app = express();
 
-// Raw body for Shopify webhook verification
+// Shopify webhook requires RAW body for signature verification
 app.use(express.raw({ type: "application/json" }));
 app.use(cors());
 
-// Root test route
+// Test route (for GET)
 app.get("/", (req, res) => {
-  res.send("🚀 Shopify Telegram Webhook is running!");
+  res.send("🚀 Shopify Telegram Webhook is running on Vercel!");
 });
 
-// Verify webhook authenticity
+// Verify Shopify webhook
 function verifyWebhook(req) {
   const hmacHeader = req.get("x-shopify-hmac-sha256");
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
@@ -51,19 +51,19 @@ async function sendTelegramMessage(text) {
   });
 }
 
-// Shopify webhook handler
+// Shopify webhook POST handler
 app.post("/", async (req, res) => {
   try {
-    // Skip verification locally
-    if (process.env.NODE_ENV !== "production") {
-      console.log("⚠️ Skipping verification for local testing");
-    } else if (!verifyWebhook(req)) {
+    const verified =
+      process.env.VERCEL_ENV === "production" ? verifyWebhook(req) : true;
+
+    if (!verified) {
       console.log("❌ Webhook verification failed");
       return res.status(401).send("Unauthorized");
     }
 
     const data = JSON.parse(req.body.toString("utf8"));
-    console.log("✅ Order received:", data.id);
+    console.log("✅ Verified order:", data.id);
 
     const message = `🛒 *New Shopify Order!*
 *Order ID:* ${data.id}
@@ -72,6 +72,7 @@ app.post("/", async (req, res) => {
 *Customer:* ${data.customer?.first_name || "Unknown"} ${data.customer?.last_name || ""}`;
 
     await sendTelegramMessage(message);
+
     res.status(200).send("OK");
   } catch (err) {
     console.error("Error:", err);
